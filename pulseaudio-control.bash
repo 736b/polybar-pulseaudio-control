@@ -295,7 +295,7 @@ function showNotification() {
     $notify "${msgSummary}" "${msgBody}" -h "int:value:${VOL_LEVEL}" -u "low" -i "${msgIcon}" &
 }
 
-# This function assumes that PulseAudio is already running. It only support
+# This function assumes that PulseAudio is already running. It only supports
 # KDE OSDs for now. It will show a system message with the status of the
 # sink passed by parameter, or the currently active one by default.
 function showOSD() {
