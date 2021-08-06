@@ -129,7 +129,9 @@ function volUp() {
         pactl set-sink-volume "$curSink" "+$VOLUME_STEP%"
     fi
 
+    getCurVol "$curSink"
     if [ $OSD = "yes" ]; then showOSD "$curSink"; fi
+    if [ $NOTIFICATIONS = "yes" ]; then showNotification "Volume up"; fi
     if [ $AUTOSYNC = "yes" ]; then volSync; fi
 }
 
@@ -143,7 +145,9 @@ function volDown() {
     fi
     pactl set-sink-volume "$curSink" "-$VOLUME_STEP%"
 
+    getCurVol "$curSink"
     if [ $OSD = "yes" ]; then showOSD "$curSink"; fi
+    if [ $NOTIFICATIONS = "yes" ]; then showNotification "Volume down"; fi
     if [ $AUTOSYNC = "yes" ]; then volSync; fi
 }
 
@@ -174,16 +178,21 @@ function volMute() {
         getIsMuted "$curSink"
         if [ "$isMuted" = "yes" ]; then
             pactl set-sink-mute "$curSink" "no"
+            msgSummary="Audio unmuted"
         else
             pactl set-sink-mute "$curSink" "yes"
+            msgSummary="Audio muted"
         fi
     elif [ "$1" = "mute" ]; then
         pactl set-sink-mute "$curSink" "yes"
+        msgSummary="Audio muted"
     elif [ "$1" = "unmute" ]; then
         pactl set-sink-mute "$curSink" "no"
+        msgSummary="Audio unmuted"
     fi
 
     if [ $OSD = "yes" ]; then showOSD "$curSink"; fi
+    if [ $NOTIFICATIONS = "yes" ]; then showNotification "${msgSummary}"; fi
 }
 
 
@@ -242,20 +251,51 @@ function nextSink() {
         pactl move-sink-input "$i" "$newSink"
     done
 
-    if [ $NOTIFICATIONS = "yes" ]; then
-        getNickname "$newSink"
-
-        if command -v dunstify &>/dev/null; then
-            notify="dunstify --replace 201839192"
-        else
-            notify="notify-send"
-        fi
-        $notify "PulseAudio" "Changed output to $SINK_NICKNAME" --icon=audio-headphones-symbolic &
-    fi
+    if [ $NOTIFICATIONS = "yes" ]; then showNotification "Audio output changed"; fi
 }
 
 
-# This function assumes that PulseAudio is already running. It only supports
+function showNotification() {
+    msgSummary="$1"
+    getCurSink
+    getNickname "${curSink}"
+    getCurVol "${curSink}"
+    getIsMuted "${curSink}"
+    case "${msgSummary}" in
+        "Volume up")
+            msgBody="${SINK_NICKNAME} volume increased to <b>${VOL_LEVEL}%</b>"
+            if [ $VOL_LEVEL -lt 34 ]; then msgIcon="audio-volume-low"
+            elif [ $VOL_LEVEL -lt 67] ; then msgIcon="audio-volume-medium"
+            else msgIcon="audio-volume-high"; fi
+            ;;
+        "Volume down")
+            msgBody="${SINK_NICKNAME} volume decreased to <b>${VOL_LEVEL}%</b>"
+            if [ $VOL_LEVEL -lt 34 ]; then msgIcon="audio-volume-low"
+            elif [ $VOL_LEVEL -lt 67] ; then msgIcon="audio-volume-medium"
+            else msgIcon="audio-volume-high"; fi
+            ;;
+        "Audio muted")
+            msgBody="${SINK_NICKNAME} is now <b>muted</b>"
+            msgIcon="audio-off"
+            ;;
+        "Audio unmuted")
+            msgBody="${SINK_NICKNAME} is now <b>unmuted</b>"
+            msgIcon="audio-on"
+            ;;
+        "Audio output changed")
+            msgBody="Changed output to <b>${SINK_NICKNAME}</b>"
+            msgIcon="audio-ready"
+            ;;
+    esac
+    if command -v dunstify &>/dev/null; then
+        notify="dunstify -a PulseAudio -h string:x-dunst-stack-tag:audio"
+    else
+        notify="notify-send -h string:x-canonical-private-synchronous:audio"
+    fi
+    $notify "${msgSummary}" "${msgBody}" -h "int:value:${VOL_LEVEL}" -u "low" -i "${msgIcon}" &
+}
+
+# This function assumes that PulseAudio is already running. It only support
 # KDE OSDs for now. It will show a system message with the status of the
 # sink passed by parameter, or the currently active one by default.
 function showOSD() {
